@@ -1,7 +1,5 @@
 from tkinter import *
-import function
 import gui
-import numpy
 
 root = Tk()
 
