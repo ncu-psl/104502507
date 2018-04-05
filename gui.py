@@ -1,86 +1,116 @@
 from tkinter import *
 from tkinter import messagebox
-from tkinter import ttk
 import linearalgebra
 import parameter
 import function
 import re
 
 
-class GUI(Frame):
+class GUI(object):
 
-    def __init__(self, master = None):
-        Frame.__init__(self, master)
+    def __init__(self, master):
         self.master = master
+        frmroot = Frame(self.master)
+        frmroot.grid(row=0, column=0)
+        self.frm1 = Frame(frmroot)
+        self.frm2 = Frame(frmroot)
         self.currentline = 1.0      # currentline 要打在 function 模組裡面
         self.outputline = 1.0
         self.inputline = 1.0
+        self.frm1.grid(row=0, column=0, columnspan=2, rowspan=10)
+        self.frm2.grid(row=0, column=6, columnspan=5, rowspan=10)
         self.init_window()
+
 
     def hello(self):
         pass
 
-    def command(self, event):       # 指令中若有空格還需要處理，目前只測試不做空格
+    def updateworkspace(self):
+        self.workspace.config(state=NORMAL)
+        self.workspace.delete('1.0', END)
+        for k,v in parameter.parameterdic.items():
+            if k == 'x' or k == 'y' or k == 'z':
+                pass
+            elif isinstance(v, linearalgebra.matrix):
+                self.workspace.insert(INSERT, str(k) + ' : ' + str(v.matrix) + '\n')
+            elif isinstance(v, linearalgebra.polynomial):
+                self.workspace.insert(INSERT, str(k) + ' : ' + str(v.p) + '\n')
+            else:
+                self.workspace.insert(INSERT, str(k) + ' : ' + str(v) + '\n')
+        self.workspace.config(state=DISABLED)
+
+    def comment(self, iscomment):
+        if iscomment['iscomment']:
+            self.panel.tag_add('comment_tag', iscomment['comments'], 'end-1c')
+            self.panel.tag_config('comment_tag', foreground='green')
+
+    def command(self, event):
         cmd = self.panel.get(self.currentline, 'end-1c')
-        if re.match(r'^[^\W]$', cmd):
-            if cmd == 'cleanmem':       # cleanmem
-                function.cleanmem()
-            elif cmd == 'clear':     # clear
-                self.panel.delete(0.0, END)
-                self.currentline = 1.0
-                self.outputline = 1.0
-                self.inputline = 1.0
-            elif cmd =='print':
-                try:
-                    ans = cmd[cmd.find('(')+1:cmd.find(')')]
-                    self.panel.insert(INSERT, '\nOut [' + str(int(self.outputline)) + ']: ' + ans + ' = ' + str(parameter.polynomialdic[ans]))
-                    self.outputline += 1
-                    self.currentline += 1
-                except:
-                    self.panel.insert(INSERT, '\nThere is an error in your input.')
-                    self.outputline += 1
-                    self.currentline += 1
+        self.comment(function.iscomment(cmd, self.currentline))
+        no_comment_cmd = function.iscomment(cmd, self.currentline)['cmd']
+        cmddic = function.command(no_comment_cmd)
+        if cmddic['instruction'] == 'cleanmem':
+            self.currentline = 1.0
+
+        elif cmddic['instruction'] == 'clear':
+            # self.panel.delete(1.0, END)
+            # self.panel.mark_set(CURRENT, '1.0')
+            self.panel = Text(self.frm1, height=2,font=("Helvetica", 20))
+            self.panel.bind('<Return>', self.command)
+            self.panel.grid(row=0, column=0, ipady=363, sticky=S)
+            self.panel.mark_set(INSERT, '1.0')
+            self.currentline = 1.0
+            # self.outputline = 1.0
+            self.inputline = 1.0
+
+        elif cmddic['instruction'] == 'show':
+            self.panel.tag_config('print_tag', foreground='blue')
+
+            if isinstance(parameter.parameterdic[cmddic['varname']], linearalgebra.matrix):
+                self.panel.insert(INSERT,'\nOut [' + str(int(self.outputline)) + ']: ' + cmddic['varname'] + ' = ' + str(parameter.parameterdic[cmddic['varname']].matrix), 'print_tag')
+            elif isinstance(parameter.parameterdic[cmddic['varname']], linearalgebra.polynomial):
+                self.panel.insert(INSERT,'\nOut [' + str(int(self.outputline)) + ']: ' + cmddic['varname'] + ' = ' + str(parameter.parameterdic[cmddic['varname']].p), 'print_tag')
             else:
-                self.panel.insert(INSERT, '\nThere is an error in your input.')
-                self.outputline += 1
-                self.currentline += 1
-        elif re.match(r'^[A-Za-z]+[0-9]*\(?[a-z]?\)?\s?=\s?[^\[].+[^\]]$', cmd):        # 賦值
-            parameter.polynomialdic[cmd[:cmd.find('=')]] = cmd[cmd.find('=') + 1:]
-        elif re.match(r'^[A-Za-z]+[0-9]*\(?[a-z]?\)?\s?=\s?\[{1}[0-9;,\s]+\]{1}$', cmd):      # 創建矩陣
-            if cmd.find(';') == -1:
-                self.panel.insert(INSERT, '\nThere is an error in your input.')
-                self.outputline += 1
-                self.currentline += 1
-            else:
-                name = cmd.strip().split('=')[0]
-                value = cmd.strip().split('=')[1]
-                matrix = []
-                while value.find(';') != -1:
-                    row = list(value[:value.find(';')])
-                    for i in row:
-                        if i == ',' or i == ' ' or i == '[' or i == ']':
-                            row.remove(i)
-                    for i in range(len(row)):
-                        row[i] = int(row[i])
-                    matrix.append(row)
-                    value = value[value.find(';')+1:]
-                function.creatematrix(name, matrix, len(matrix), len(matrix[0]))
-                self.panel.insert(INSERT, '\nOut [' + str(int(self.outputline)) + ']: ' + name + ' = ' + str(parameter.matrixdic[name].matrix))
-                self.outputline += len(matrix)
-                self.currentline += len(matrix)
-        else:
-            try:
-                exec(cmd, parameter.polynomialdic, parameter.matrixdic)
-            except:
-                self.panel.insert(INSERT, '\nThere is an error in your input.')
-                self.outputline += 1
-                self.currentline += 1
-        self.inputline += 1
-        self.outputline += 1
-        self.currentline += 1
+                self.panel.insert(INSERT, '\nOut [' + str(int(self.outputline)) + ']: ' + cmddic['varname'] + ' = ' + str(parameter.parameterdic[cmddic['varname']]), 'print_tag')
+
+            self.outputline += 1
+            self.currentline += 2
+
+        elif cmddic['instruction'] == 'assignvalue':
+            self.currentline += 1
+
+        elif cmddic['instruction'] == 'assignpoly':
+            self.currentline += 1
+
+        elif cmddic['instruction'] == 'evalpoly':
+            self.panel.insert(INSERT, '\nOut [' + str(int(self.outputline)) + ']: ' + str(cmddic['ans']))
+            self.outputline += 1
+            self.currentline += 2
+
+        elif cmddic['instruction'] == 'assignmatrix':
+            self.panel.insert(INSERT, '\nOut [' + str(int(self.outputline)) + ']: ' + str(cmddic['var'].name) + ' = ' + str(parameter.parameterdic[cmddic['var'].name].matrix))
+            # self.outputline += len(cmddic['var'].matrix)
+            self.currentline += len(cmddic['var'].matrix)+1
+
+        elif cmddic['instruction'] == 'polyerror':
+            self.panel.tag_config('error_tag', foreground='red')
+            self.panel.insert(INSERT, '\nPlease follow the format when you assign a polynomial: "polynomialname(symbol)" ', 'error_tag')
+            # self.outputline += 1
+            self.currentline += 2
+
+        elif cmddic['instruction'] == 'default':
+            self.currentline += 1
+            self.updateworkspace()
+
+        elif cmddic['instruction'] == 'error':
+            self.panel.tag_config('error_tag', foreground='red')
+            self.panel.insert(INSERT, '\nThere is an error in your input.', 'error_tag')
+            # self.outputline += 1
+            self.currentline += 2
         '''if not self.panel.get(self.currentline, 'end-1c'):
             self.panel.insert(INSERT, '\n')
             self.panel.insert(INSERT, 'In [' + str(int(self.inputline)) + ']: ')'''       # In [currentline]: 會多換一行
+        self.updateworkspace()
 
     def makematrix(self, event):  # 建構矩陣
         if not self.matrixrowentry.get() \
@@ -92,9 +122,9 @@ class GUI(Frame):
             row = int(self.matrixrowentry.get())
             col = int(self.matrixcolentry.get())
             name = self.matrixnameentry.get()
-            parameter.matrixdic[name] = linearalgebra.matrix(name, row, col)
+            parameter.parameterdic[name] = linearalgebra.matrix(name, row, col)
             self.panel.insert(INSERT, 'Out [' + str(int(self.outputline)) + ']: ' + name + ' = ')
-            self.panel.insert(INSERT, parameter.matrixdic[name].matrix)
+            self.panel.insert(INSERT, parameter.parameterdic[name].matrix)
             self.panel.insert(INSERT, '\n')
             self.currentline += 1
             self.outputline += 1
@@ -132,17 +162,17 @@ class GUI(Frame):
 
         self.matrix.mainloop()
 
-    def dotranspose(self, event):  # 建構轉置矩陣                            先複製該矩陣，再作轉置，原本矩陣的名稱a，轉置過後的名稱a.transpose
+    def dotranspose(self, event):  # 建構轉置矩陣          先複製該矩陣，再作轉置，原本矩陣的名稱a，轉置過後的名稱a.transpose
         name = self.matrixTnameentry.get()
-        row = parameter.matrixdic[name].row
-        col = parameter.matrixdic[name].col
-        if not parameter.matrixdic[name]:
-            parameter.matrixdic[name] = linearalgebra.matrix(name, row, col)
+        row = parameter.parameterdic[name].row
+        col = parameter.parameterdic[name].col
+        if not parameter.parameterdic[name]:
+            parameter.parameterdic[name] = linearalgebra.matrix(name, row, col)
         else:
             pass
-        parameter.matrixdic[name].T()
+        parameter.parameterdic[name].T()
         self.panel.insert(INSERT, 'Out [' + str(int(self.outputline)) + ']: ' + name + ' = ')
-        self.panel.insert(INSERT, parameter.matrixdic[name].matrixT)
+        self.panel.insert(INSERT, parameter.parameterdic[name].matrixT)
         self.panel.insert(INSERT, '\n')
         self.currentline += 1
         self.outputline += 1
@@ -172,20 +202,20 @@ class GUI(Frame):
 
     def doinverse(self, event):  # 建構反矩陣                            尚未防呆(行列式為0)
         name = self.matrixInameentry.get()
-        row = parameter.matrixdic[name].row
-        col = parameter.matrixdic[name].col
+        row = parameter.parameterdic[name].row
+        col = parameter.parameterdic[name].col
         if not name \
                 or not row \
                 or not col \
-                or not parameter.matrixdic[name] \
+                or not parameter.parameterdic[name] \
                 or row != col:
             messagebox.showerror('錯誤', '輸入矩陣須為方陣')
         else:
-            parameter.matrixdic[name + '.inverse'] = linearalgebra.matrix(name + '.transpose', row, col)
+            parameter.parameterdic[name + '.inverse'] = linearalgebra.matrix(name + '.transpose', row, col)
             name = name + '.inverse'
-            parameter.matrixdic[name].I()
+            parameter.parameterdic[name].I()
             self.panel.insert(INSERT, 'Out [' + str(int(self.outputline)) + ']: ' + name + ' = ')
-            self.panel.insert(INSERT, parameter.matrixdic[name].matrix)
+            self.panel.insert(INSERT, parameter.parameterdic[name].matrix)
             self.panel.insert(INSERT, '\n')
             self.currentline += 1
             self.outputline += 1
@@ -216,15 +246,15 @@ class GUI(Frame):
 
     def dodeterminate(self, event):
         name = self.matrixDnameentry.get()
-        row = parameter.matrixdic[name].row
-        col = parameter.matrixdic[name].col
-        if not parameter.matrixdic[name] or row != col:
+        row = parameter.parameterdic[name].row
+        col = parameter.parameterdic[name].col
+        if not parameter.parameterdic[name] or row != col:
             messagebox.showerror('錯誤', '輸入矩陣須為方陣')
         else:
-            parameter.matrixdic[name].D()
-            parameter.matrixdic['det(' + name + ')'] = parameter.matrixdic[name].matrixD
+            parameter.parameterdic[name].D()
+            parameter.parameterdic['det(' + name + ')'] = parameter.parameterdic[name].matrixD
             self.panel.insert(INSERT, 'Out [' + str(int(self.outputline)) + ']: ' + 'det(' + name + ') = ')
-            self.panel.insert(INSERT, parameter.matrixdic['det(' + name + ')'])
+            self.panel.insert(INSERT, parameter.parameterdic['det(' + name + ')'])
             self.panel.insert(INSERT, '\n')
             self.currentline += 1
             self.outputline += 1
@@ -267,11 +297,11 @@ class GUI(Frame):
             p = self.difpolynomialentry.get()
             symbol = self.differentialsymbolentry.get()
             times = int(self.timesentry.get())
-            parameter.polynomialdic[name] = linearalgebra.polynomial(name, p, symbol)
-            parameter.polynomialdic[name].dif(times)
-            parameter.polynomialdic[name + '.dif'] = parameter.polynomialdic[name].dif
+            parameter.parameterdic[name] = linearalgebra.polynomial(name, p, symbol)
+            parameter.parameterdic[name].dif(times)
+            parameter.parameterdic[name + '.dif'] = parameter.parameterdic[name].dif
             self.panel.insert(INSERT, 'Out [' + str(int(self.outputline)) + ']: ' + name + '.dif' + ' = ')
-            self.panel.insert(INSERT, parameter.polynomialdic[name + '.dif'])
+            self.panel.insert(INSERT, parameter.parameterdic[name + '.dif'])
             self.panel.insert(INSERT, '\n')
             self.currentline += 1
             self.outputline += 1
@@ -327,11 +357,11 @@ class GUI(Frame):
                 symbol = self.integrationsymbolentry.get()
                 upperbound = self.upperboundentry.get()
                 lowerbound = self.lowerboundentry.get()
-                parameter.polynomialdic[name] = linearalgebra.polynomial(name, p, symbol)
-                parameter.polynomialdic[name].S(upperbound, lowerbound)
-                parameter.polynomialdic[name + '.definite_S'] = parameter.polynomialdic[name].S
+                parameter.parameterdic[name] = linearalgebra.polynomial(name, p, symbol)
+                parameter.parameterdic[name].S(upperbound, lowerbound)
+                parameter.parameterdic[name + '.definite_S'] = parameter.parameterdic[name].S
                 self.panel.insert(INSERT, 'Out [' + str(int(self.outputline)) + ']: ' + name + '.definite_S' + ' = ')
-                self.panel.insert(INSERT, parameter.polynomialdic[name + '.definite_S'])
+                self.panel.insert(INSERT, parameter.parameterdic[name + '.definite_S'])
                 self.panel.insert(INSERT, '\n')
                 self.currentline += 1
                 self.outputline += 1
@@ -345,18 +375,19 @@ class GUI(Frame):
                 name = self.intpolynomialnameentry.get()
                 p = self.intpolynomialentry.get()
                 symbol = self.integrationsymbolentry.get()
-                parameter.polynomialdic[name] = linearalgebra.polynomial(name, p, symbol)
-                parameter.polynomialdic[name].S()
-                parameter.polynomialdic[name + '.S'] = parameter.polynomialdic[name].S
+                parameter.parameterdic[name] = linearalgebra.polynomial(name, p, symbol)
+                parameter.parameterdic[name].S()
+                parameter.parameterdic[name + '.S'] = parameter.parameterdic[name].S
                 self.panel.insert(INSERT, 'Out [' + str(int(self.outputline)) + ']: ' + name + '.S' + ' = ')
-                self.panel.insert(INSERT, parameter.polynomialdic[name + '.S'])
+                self.panel.insert(INSERT, parameter.parameterdic[name + '.S'])
                 self.panel.insert(INSERT, '\n')
                 self.currentline += 1
                 self.outputline += 1
                 self.S.destroy()
 
-    def check(self):  # 檢查是否為定積分
-        if self.checkSvar.get():
+    def checkintegral(self):  # 檢查是否為定積分
+        isintegral = self.checkSvar.get()
+        if function.isintegral(isintegral):
             self.checkSvar.set(0)
             self.upperboundentry.configure(state = DISABLED)
             self.lowerboundentry.configure(state = DISABLED)
@@ -396,7 +427,7 @@ class GUI(Frame):
         self.lowerboundentry.grid(row = 10, column = 1, sticky = E)
 
         self.checkSvar = IntVar()
-        self.checkS = Checkbutton(self.S, text = '定積分', variable = self.checkSvar, command = self.check)
+        self.checkS = Checkbutton(self.S, text = '定積分', variable = self.checkSvar, command = self.checkintegral)
         self.checkS.grid(row = 6, columnspan = 2, sticky = E)
 
         self.differentialconfirm = Button(self.S, text = '確定')  # 確定按鈕
@@ -411,8 +442,12 @@ class GUI(Frame):
     def doplot(self, event):
         xlowerbound = int(self.xlowerboundentry.get())
         xupperbound = int(self.xupperboundentry.get()) + 1
-        formula = self.formulaentry.get()
-        function.plot(xlowerbound, xupperbound, formula)
+        formulas = self.formulaentry.get().split(',')
+
+        function.plot(xlowerbound, xupperbound, formulas)
+
+
+        self.draw.destroy()
 
 
     def plot(self):
@@ -423,41 +458,32 @@ class GUI(Frame):
 
         self.formulalabel = Label(self.draw, text='  方程式: ')
         self.xlabel = Label(self.draw, text='  x的範圍: ')
-        self.ylabel = Label(self.draw, text='  y的範圍: ')
-        self.kind = Label(self.draw, text='  樣式: ')
+
 
         Label(self.draw, text = ' ').grid(row = 0, column = 0, sticky = E)
         self.formulalabel.grid(row = 2, column = 0, sticky = E)
         self.xlabel.grid(row = 4, column = 0, sticky = E)
         Label(self.draw, text = '~').grid(row = 4, column = 2, sticky = E)
-        self.ylabel.grid(row = 6, column = 0, sticky = E)
-        Label(self.draw, text='~').grid(row = 6, column = 2, sticky = E)
-        self.kind.grid(row = 8, column = 0, sticky = E)
+
 
         self.formulaentry = Entry(self.draw, width = 13)
         self.xlowerboundentry = Entry(self.draw, width = 13)
         self.xupperboundentry = Entry(self.draw, width = 13)
-        # self.ylowerboundentry = Entry(self.draw, width = 13)
-        # self.yupperboundentry = Entry(self.draw, width = 13)
+
 
         self.formulaentry.grid(row=2, column=1, sticky=E)
         self.xlowerboundentry.grid(row=4, column=1, sticky=E)
         self.xupperboundentry.grid(row=4, column=3, sticky=E)
-        # self.ylowerboundentry.grid(row=6, column=1, sticky=E)
-        # self.yupperboundentry.grid(row=6, column=3, sticky=E)
 
-        number = StringVar()
-        numberChosen = ttk.Combobox(self.draw, width = 12, textvariable = number)
-        numberChosen['values'] = ('折線圖', '圓餅圖')
-        numberChosen.grid(row = 8, column = 1, sticky = E)
-        numberChosen.current(0)
+
 
         self.drawconfirm = Button(self.draw, text='確定')  # 確定按鈕
         self.drawconfirm.bind('<Button-1>', self.doplot)
         self.drawcancel = Button(self.draw, text='取消')  # 取消按鈕
         self.drawcancel.bind('<Button-1>', lambda _: self.draw.destroy())
-        self.drawconfirm.grid(row=12, column=1)
-        self.drawcancel.grid(row=12, column=2)
+        Label(self.draw, text=' ').grid(row=6, column=1, sticky=E)
+        self.drawconfirm.grid(row=20, column=1)
+        self.drawcancel.grid(row=20, column=2)
 
         self.draw.mainloop()
 
@@ -465,8 +491,8 @@ class GUI(Frame):
         self.master.state('zoomed')
         self.master.title("還沒想好名字")  # 檔案名稱(還沒想)
         self.master.iconbitmap('psl.ico')  # 設定實驗室logo
-        self.master.grid_columnconfigure(0, weight=1)
-        self.master.grid_rowconfigure(0, weight=1)
+        self.frm1.grid_columnconfigure(0, weight=1)
+        self.frm1.grid_rowconfigure(0, weight=1)
         '''When using grid, any extra space in the parent is allocated proportionate to the "weight" of a row and/or a column (ie: a column with a weight of 2 gets twice as much of the space as one with a weight of 1). 
            By default, rows and columns have a weight of 0 (zero), meaning no extra space is given to them.
            You need to give the column that the widget is in a non-zero weight, so that any extra space when the window grows is allocated to that column.
@@ -502,6 +528,7 @@ class GUI(Frame):
         self.tool2.add_command(label = '積分', command = self.integration)
 
         # tool2.add_command(label = '泰勒展開式')
+
         self.tool2.add_command(label = '極值')
 
         self.tool3 = Menu(self.toolbar, tearoff=0)  # 工具列 4
@@ -511,11 +538,15 @@ class GUI(Frame):
 
         self.master.config(menu = self.toolbar)
 
-        self.panel = Text(self.master, height = 2, font = ("Helvetica", 20))     # 文字面板 ------------------------------> 使用者輸入指令
+        self.panel = Text(self.frm1, height = 2, font = ("Helvetica", 20))     # 文字面板 ------------------------------> 使用者輸入指令
         # self.panel.insert(INSERT, 'In [' + str(int(self.inputline)) + ']: ')
         self.panel.bind('<Return>', self.command)
+        self.panel.grid(row=0, column=0, ipady=363, sticky=S)
 
-        self.panel.grid(row = 0, column = 0, columnspan = 20, rowspan = 20, sticky = W + E + S + N)
+
+        self.workspace = Text(self.frm2, height=2, font=("Helvetica", 20))      # workspace
+        self.workspace.grid(row=0, column=0, ipady=363, sticky=S)
+
         '''Since your window only contains one widget and you want this widget to fill the entire window, 
            it would be easier to use the pack geometry manager instead of grid
            input_text_area.pack(expand=True, fill='both')
@@ -523,3 +554,11 @@ class GUI(Frame):
            fill='both' enables the widget to expand both horizontally and vertically.'''
 
 
+# if __main__ == '__main__':
+#     root = Tk()
+#
+#     root.geometry('400x300')
+#
+#     app = gui.GUI(root)
+#
+#     mainloop()
