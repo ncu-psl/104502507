@@ -1,12 +1,13 @@
 from tkinter import *
-import function
 import gui
-import numpy
 
 root = Tk()
 
-root.geometry('400x300')
+w = root.winfo_screenwidth()
+h = root.winfo_screenheight()
 
-app = gui.GUI(root)
+root.geometry('%dx%d'%(w, h))
+
+app = gui.GUI(root, w, h)
 
 root.mainloop()
